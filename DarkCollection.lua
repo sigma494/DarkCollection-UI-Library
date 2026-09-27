@@ -53,11 +53,13 @@
 --//========================================================================//
 
 local EDIT_ME = {
-    -- Window
+    -- Window (scale-based so the right panel reaches toward the screen edge;
+    --          tweak these 3 numbers to go narrower/wider/fullscreen)
     WindowName        = "Dark Collection",
     WindowSubtitle    = "gray elegant dashboard",
-    WindowSize        = UDim2.fromOffset(860, 540),
+    WindowSize        = UDim2.new(0.85, 0, 0.82, 0),
     WindowMinSize     = Vector2.new(700, 420),
+    WindowMaxSize     = Vector2.new(1600, 900),
 
     -- Palette: gray + black elegant
     Background        = Color3.fromRGB(10, 10, 12),      -- main window
@@ -567,6 +569,11 @@ function Library:CreateWindow(opts)
     Main.Parent = ScreenGui
     Corner(Main, EDIT_ME.Corner_Main, "DC_MainCorner")
     Stroke(Main, EDIT_ME.Stroke, 1, 0, "DC_MainStroke")
+    local MainLimit = Instance.new("UISizeConstraint")
+    MainLimit.Name = "DC_MainSizeLimit"
+    MainLimit.MinSize = EDIT_ME.WindowMinSize
+    MainLimit.MaxSize = EDIT_ME.WindowMaxSize or Vector2.new(1600, 900)
+    MainLimit.Parent = Main
 
     -- TopBar ---------------------------------------------------------------
     local TopBar = Instance.new("Frame")
@@ -629,7 +636,7 @@ function Library:CreateWindow(opts)
         return b
     end
     local MinBtn = topBtn("DC_MinimizeBtn", "–", -76)
-    local CloseBtn = topBtn("DC_CloseBtn", "✕", -36)
+    local CloseBtn = topBtn("DC_CloseBtn", "X", -36)
     CloseBtn.BackgroundColor3 = EDIT_ME.Danger -- solid red X
     CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     CloseBtn.Font = EDIT_ME.FontTitle
@@ -681,21 +688,10 @@ function Library:CreateWindow(opts)
     NavDivider.BorderSizePixel = 0
     NavDivider.Parent = TopNav
 
-    -- wheel over the nav = horizontal slide (down -> right, up -> left)
-    do
-        local hovering = false
-        TabHolder.MouseEnter:Connect(function() hovering = true end)
-        TabHolder.MouseLeave:Connect(function() hovering = false end)
-        UserInputService.InputChanged:Connect(function(input)
-            if hovering and TabHolder.Parent then
-                if input.UserInputType == Enum.UserInputType.MouseWheelForward then
-                    TabHolder.CanvasPosition = Vector2.new(TabHolder.CanvasPosition.X - 64, 0)
-                elseif input.UserInputType == Enum.UserInputType.MouseWheelBackward then
-                    TabHolder.CanvasPosition = Vector2.new(TabHolder.CanvasPosition.X + 64, 0)
-                end
-            end
-        end)
-    end
+    -- wheel over the top nav switches TABS (wired below, needs Window)
+    local navHovering = false
+    TabHolder.MouseEnter:Connect(function() navHovering = true end)
+    TabHolder.MouseLeave:Connect(function() navHovering = false end)
 
     -- Footer: bottom strip, player chip lives in the left corner ------------
     local Footer = Instance.new("Frame")
@@ -864,6 +860,7 @@ function Library:CreateWindow(opts)
     MinBtn.MouseButton1Click:Connect(function()
         collapsed = not collapsed
         MinBtn.Text = collapsed and "+" or "–"
+        MainLimit.Enabled = not collapsed -- constraint would block the shrink
         TW(Main, { Size = collapsed and UDim2.new(oldSize.X.Scale, oldSize.X.Offset, 0, EDIT_ME.TopBarHeight) or oldSize }, 0.22)
         Pages.Visible = not collapsed
         TopNav.Visible = not collapsed
@@ -1765,7 +1762,7 @@ function Library:CreateWindow(opts)
     PillClose.Font = EDIT_ME.FontTitle
     PillClose.TextSize = 13
     PillClose.TextColor3 = Color3.fromRGB(255, 255, 255)
-    PillClose.Text = "✕"
+    PillClose.Text = "X"
     PillClose.AutoButtonColor = true
     PillClose.Parent = TopPill
     Corner(PillClose, 99, "DC_TopPillCloseCorner")
@@ -1834,6 +1831,24 @@ function Library:CreateWindow(opts)
             end
         end)
     end
+
+    -- wheel over the TOP NAV = switch tabs (down = next, up = previous) ----
+    -- the active pill auto-scrolls into view via _select
+    UserInputService.InputChanged:Connect(function(input)
+        if not (navHovering and TabHolder.Parent and Window._active and #Window._tabs > 1) then return end
+        local dir = 0
+        if input.UserInputType == Enum.UserInputType.MouseWheelForward then
+            dir = -1
+        elseif input.UserInputType == Enum.UserInputType.MouseWheelBackward then
+            dir = 1
+        end
+        if dir == 0 then return end
+        local cur = 1
+        for i, t in ipairs(Window._tabs) do
+            if t == Window._active then cur = i break end
+        end
+        Window:_select(Window._tabs[((cur - 1 + dir) % #Window._tabs) + 1])
+    end)
 
     table.insert(Library._windows, Window)
 
