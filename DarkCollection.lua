@@ -1558,6 +1558,14 @@ function Library:CreateWindow(opts)
                 end
             end
         end
+        -- floating top pill follows the active tab
+        pcall(function()
+            local pillTab = self._gui and self._gui:FindFirstChild("DC_TopPillTab", true)
+            if pillTab then
+                pillTab.Text = tab.Name
+                if Main.Visible then pillTab.TextColor3 = EDIT_ME.Text end
+            end
+        end)
         -- keep the active pill in view when wheel/tap-jumping
         pcall(function()
             local holder = self._tabHolder
@@ -1565,6 +1573,119 @@ function Library:CreateWindow(opts)
             if x < holder.CanvasPosition.X or x > holder.CanvasPosition.X + holder.AbsoluteWindowSize.X - tab._btn.AbsoluteSize.X then
                 holder.CanvasPosition = Vector2.new(math.max(0, x), 0)
             end
+        end)
+    end
+
+    -- Floating top-center pill (NOT connected to the main window) -----------
+    -- DC logo + current tab name. Hover it and scroll to switch tabs
+    -- (down = next, up = previous). Click body = show/hide window. X = unload.
+    local TopPill = Instance.new("Frame")
+    TopPill.Name = "DC_TopPill"
+    TopPill.Size = UDim2.fromOffset(300, 36)
+    TopPill.Position = UDim2.new(0.5, -150, 0, 12)
+    TopPill.BackgroundColor3 = EDIT_ME.Panel
+    TopPill.BorderSizePixel = 0
+    TopPill.ZIndex = 60
+    TopPill.Parent = ScreenGui
+    Corner(TopPill, 99, "DC_TopPillCorner")
+    Stroke(TopPill, EDIT_ME.Stroke, 1, 0, "DC_TopPillStroke")
+    Padding(TopPill, 6, 4, 6, 4, "DC_TopPillPadding")
+
+    -- DC brand mark (DarkCollection — their "LP" logo becomes "DC")
+    local Logo = Label(TopPill, "DC_TopPillLogo", "DC", 17, EDIT_ME.Accent,
+        Enum.Font.GothamBlack, Enum.TextXAlignment.Center)
+    Logo.Size = UDim2.fromOffset(46, 28)
+    Logo.Position = UDim2.new(0, 0, 0.5, -14)
+
+    local PillDiv = Instance.new("Frame")
+    PillDiv.Name = "DC_TopPillDivider"
+    PillDiv.Size = UDim2.new(0, 1, 1, -8)
+    PillDiv.Position = UDim2.new(0, 52, 0, 4)
+    PillDiv.BackgroundColor3 = EDIT_ME.Stroke
+    PillDiv.BorderSizePixel = 0
+    PillDiv.Parent = TopPill
+
+    local PillTab = Label(TopPill, "DC_TopPillTab", "—", 13, EDIT_ME.Text,
+        EDIT_ME.FontBody, Enum.TextXAlignment.Center)
+    PillTab.Size = UDim2.new(1, -116, 1, 0)
+    PillTab.Position = UDim2.new(0, 58, 0, 0)
+
+    -- invisible click layer over logo+tab (NOT over the X)
+    local PillToggle = Instance.new("TextButton")
+    PillToggle.Name = "DC_TopPillToggle"
+    PillToggle.Size = UDim2.new(1, -40, 1, 0)
+    PillToggle.Position = UDim2.new(0, 0, 0, 0)
+    PillToggle.BackgroundTransparency = 1
+    PillToggle.BorderSizePixel = 0
+    PillToggle.Text = ""
+    PillToggle.Parent = TopPill
+
+    local PillClose = Instance.new("TextButton")
+    PillClose.Name = "DC_TopPillClose"
+    PillClose.Size = UDim2.fromOffset(28, 28)
+    PillClose.Position = UDim2.new(1, -28, 0.5, -14)
+    PillClose.BackgroundColor3 = EDIT_ME.ElementBG
+    PillClose.BorderSizePixel = 0
+    PillClose.Font = EDIT_ME.FontBody
+    PillClose.TextSize = 13
+    PillClose.TextColor3 = EDIT_ME.Danger
+    PillClose.Text = "✕"
+    PillClose.Parent = TopPill
+    Corner(PillClose, 99, "DC_TopPillCloseCorner")
+    Stroke(PillClose, EDIT_ME.StrokeSoft, 1, 0, "DC_TopPillCloseStroke")
+
+    -- drag the pill anywhere on screen
+    do
+        local dragging, dragStart, startPos = false, nil, nil
+        TopPill.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging, dragStart, startPos = true, input.Position, TopPill.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local d = input.Position - dragStart
+                TopPill.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
+                    startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    -- click body = show / hide the main window (pill always stays)
+    PillToggle.MouseButton1Click:Connect(function()
+        Main.Visible = not Main.Visible
+        PillTab.TextColor3 = Main.Visible and EDIT_ME.Text or EDIT_ME.Faint
+    end)
+
+    -- X at the top = unload the whole UI
+    PillClose.MouseButton1Click:Connect(function()
+        print("[DarkCollection] Unloaded from top pill.")
+        pcall(function() ScreenGui:Destroy() end)
+    end)
+
+    -- scroll while hovering the pill = change tabs
+    do
+        local hovering = false
+        TopPill.MouseEnter:Connect(function() hovering = true end)
+        TopPill.MouseLeave:Connect(function() hovering = false end)
+        UserInputService.InputChanged:Connect(function(input)
+            if not (hovering and TopPill.Parent and #Window._tabs > 0) then return end
+            local dir = 0
+            if input.UserInputType == Enum.UserInputType.MouseWheelForward then
+                dir = -1
+            elseif input.UserInputType == Enum.UserInputType.MouseWheelBackward then
+                dir = 1
+            end
+            if dir == 0 then return end
+            local cur = 1
+            for i, t in ipairs(Window._tabs) do
+                if t == Window._active then cur = i break end
+            end
+            local nxt = ((cur - 1 + dir) % #Window._tabs) + 1
+            Window:_select(Window._tabs[nxt])
         end)
     end
 
