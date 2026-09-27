@@ -54,7 +54,7 @@ Window:CreateSettingsTab() -- themes + Save/Load GUI
 - Floating top-center **DC** pill (detached): shows `Tab • Section`,
   scroll over it to switch sections, click to hide, red X to unload
 - Responsive window (`EDIT_ME.WindowSize`, min/max clamped) reaching
-  toward the screen edges
+  toward the screen edges — drag any corner to scale it live
 - Inside every tab: left **section list** + right **detail panel** showing
   only the selected section (Main → main stuff, Settings → settings stuff…)
 - Bottom-left player chip: Roblox PFP + DisplayName + `@username` + live FPS/ping

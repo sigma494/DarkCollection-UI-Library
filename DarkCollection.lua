@@ -23,6 +23,7 @@
     EVERYTHING IS NAMED so anyone can edit it in Explorer:
       DC_ScreenGui / DC_Backdrop / DC_Main / DC_TopBar / DC_TopNav / DC_Pages
       DC_Footer / DC_PlayerPanel / DC_PlayerAvatar / DC_FooterInfo
+      DC_TopPill (logo + tab label + red X) / DC_ResizeBR|BL|TR|TL (corners)
       DC_TabButton_<TabName> / DC_TabIcon_<TabName> / DC_Page_<TabName>
       DC_SectionNav_<Tab> / DC_SectionBtn_<Sec> / DC_Detail_<Tab>
       DC_SectionPage_<Sec> / DC_Button_<Name> / DC_Toggle_<Name>
@@ -1849,6 +1850,111 @@ function Library:CreateWindow(opts)
         end
         Window:_select(Window._tabs[((cur - 1 + dir) % #Window._tabs) + 1])
     end)
+
+    -- Corner resize: drag ANY window corner to scale the GUI ----------------
+    -- Bottom-right also shows a little bracket grip. Clamped to
+    -- EDIT_ME.WindowMinSize / WindowMaxSize. Disabled while minimized.
+    do
+        local GRIP = 20
+
+        local function viewport()
+            local cam = workspace.CurrentCamera
+            return (cam and cam.ViewportSize) or Vector2.new(1280, 720)
+        end
+
+        local function makeGrip(name, xScale, xOff, yScale, yOff, corner)
+            -- corner: "BR" | "BL" | "TR" | "TL" = which edges follow the mouse
+            local g = Instance.new("TextButton")
+            g.Name = name
+            g.Size = UDim2.fromOffset(GRIP, GRIP)
+            g.Position = UDim2.new(xScale, xOff, yScale, yOff)
+            g.BackgroundColor3 = EDIT_ME.Accent
+            g.BackgroundTransparency = 1 -- invisible until hover
+            g.BorderSizePixel = 0
+            g.Text = ""
+            g.AutoButtonColor = false
+            g.ZIndex = 20
+            g.Parent = Main
+            Corner(g, 6, name .. "Corner")
+
+            local resizing, dragStart, startAbs, startSize, startPos = false, nil, nil, nil, nil
+            g.InputBegan:Connect(function(input)
+                if collapsed then return end
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.Touch then
+                    resizing, dragStart = true, input.Position
+                    startAbs, startSize, startPos = Main.AbsoluteSize, Main.Size, Main.Position
+                    input.Changed:Connect(function()
+                        if input.UserInputState == Enum.UserInputState.End then resizing = false end
+                    end)
+                end
+            end)
+            g.MouseEnter:Connect(function()
+                if collapsed then return end
+                TW(g, { BackgroundTransparency = 0.75 }, 0.12)
+            end)
+            g.MouseLeave:Connect(function()
+                TW(g, { BackgroundTransparency = 1 }, 0.12)
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                local isMouse = input.UserInputType == Enum.UserInputType.MouseMovement
+                local isTouch = input.UserInputType == Enum.UserInputType.Touch
+                if not (resizing and (isMouse or isTouch)) then return end
+                local dx = input.Position.X - dragStart.X
+                local dy = input.Position.Y - dragStart.Y
+                local min = EDIT_ME.WindowMinSize
+                local max = EDIT_ME.WindowMaxSize or Vector2.new(1600, 900)
+                local nw, nh = startAbs.X, startAbs.Y
+                if corner == "BR" or corner == "TR" then nw = startAbs.X + dx
+                else nw = startAbs.X - dx end
+                if corner == "BR" or corner == "BL" then nh = startAbs.Y + dy
+                else nh = startAbs.Y - dy end
+                nw = math.clamp(nw, min.X, max.X)
+                nh = math.clamp(nh, min.Y, max.Y)
+                -- left / top corners move the window so the opposite edge stays put
+                local nx, ny = startPos.X.Offset, startPos.Y.Offset
+                if corner == "BL" or corner == "TL" then nx = (startPos.X.Offset + startAbs.X) - nw end
+                if corner == "TR" or corner == "TL" then ny = (startPos.Y.Offset + startAbs.Y) - nh end
+                local vp = viewport()
+                Main.Size = UDim2.new(startSize.X.Scale, nw - vp.X * startSize.X.Scale,
+                    startSize.Y.Scale, nh - vp.Y * startSize.Y.Scale)
+                Main.Position = UDim2.new(startPos.X.Scale, nx, startPos.Y.Scale, ny)
+            end)
+            return g
+        end
+
+        makeGrip("DC_ResizeBR", 1, -GRIP, 1, -GRIP, "BR")
+        makeGrip("DC_ResizeBL", 0, 0, 1, -GRIP, "BL")
+        makeGrip("DC_ResizeTR", 1, -GRIP, 0, 0, "TR")
+        makeGrip("DC_ResizeTL", 0, 0, 0, 0, "TL")
+
+        -- visible bracket grip on the bottom-right handle (plain frames)
+        local br = Main:FindFirstChild("DC_ResizeBR")
+        if br then
+            local h = Instance.new("Frame")
+            h.Name = "DC_ResizeGripH"
+            h.Size = UDim2.fromOffset(10, 2)
+            h.Position = UDim2.new(1, -13, 1, -6)
+            h.BackgroundColor3 = EDIT_ME.Faint
+            h.BackgroundTransparency = 0.3
+            h.BorderSizePixel = 0
+            h.Active = false
+            h.ZIndex = 21
+            h.Parent = br
+            Corner(h, 2, "DC_ResizeGripHCorner")
+            local v = Instance.new("Frame")
+            v.Name = "DC_ResizeGripV"
+            v.Size = UDim2.fromOffset(2, 10)
+            v.Position = UDim2.new(1, -6, 1, -13)
+            v.BackgroundColor3 = EDIT_ME.Faint
+            v.BackgroundTransparency = 0.3
+            v.BorderSizePixel = 0
+            v.Active = false
+            v.ZIndex = 21
+            v.Parent = br
+            Corner(v, 2, "DC_ResizeGripVCorner")
+        end
+    end
 
     table.insert(Library._windows, Window)
 
