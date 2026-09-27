@@ -51,6 +51,10 @@ Window:CreateSettingsTab() -- themes + Save/Load GUI
 ## Features
 
 - Top horizontal icon nav (mouse wheel slides left/right), one nav spot
+- Floating top-center **DC** pill (detached): shows `Tab • Section`,
+  scroll over it to switch sections, click to hide, red X to unload
+- Inside every tab: left **section list** + right **detail panel** showing
+  only the selected section (Main → main stuff, Settings → settings stuff…)
 - Bottom-left player chip: Roblox PFP + DisplayName + `@username` + live FPS/ping
 - Sliders two-way synced with their number boxes
 - Themes: `Default` (gray), `Orange` (claude), `Blood`, `Blue`, `White`

@@ -11,6 +11,11 @@
     Dashboard / UserPanel template  •  Gray + Black  •  Elegant UX
     Layout: TopBar + TopNav (horizontal icon pills, wheel-scroll) + Pages
             + Footer with player chip in the bottom-left corner.
+    Floating DC pill (top-center, detached): shows "Tab • Section",
+            scroll to switch sections, click to hide, red X to unload.
+    Inside every tab: LEFT section list + RIGHT detail panel that shows
+            ONLY the selected section (Main -> main stuff, Settings ->
+            settings stuff, Load -> loading stuff, ...).
     Themes: Default (gray) | Orange (claude) | Blood | Blue | White —
             switch live:  Library:SetTheme("Orange")  (or Window:SetTheme)
             or tap a theme button in the auto Settings tab.
@@ -19,7 +24,8 @@
       DC_ScreenGui / DC_Backdrop / DC_Main / DC_TopBar / DC_TopNav / DC_Pages
       DC_Footer / DC_PlayerPanel / DC_PlayerAvatar / DC_FooterInfo
       DC_TabButton_<TabName> / DC_TabIcon_<TabName> / DC_Page_<TabName>
-      DC_Section_<Name> / DC_Button_<Name> / DC_Toggle_<Name>
+      DC_SectionNav_<Tab> / DC_SectionBtn_<Sec> / DC_Detail_<Tab>
+      DC_SectionPage_<Sec> / DC_Button_<Name> / DC_Toggle_<Name>
       DC_Slider_<Name> / DC_SliderBar_<Name> / DC_SliderFill_<Name>
       DC_SliderKnob_<Name> / DC_ValueBox_<Name>
       DC_Textbox_<Name> / DC_TextboxInput_<Name>
@@ -624,7 +630,9 @@ function Library:CreateWindow(opts)
     end
     local MinBtn = topBtn("DC_MinimizeBtn", "–", -76)
     local CloseBtn = topBtn("DC_CloseBtn", "✕", -36)
-    CloseBtn.TextColor3 = EDIT_ME.Danger
+    CloseBtn.BackgroundColor3 = EDIT_ME.Danger -- solid red X
+    CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseBtn.Font = EDIT_ME.FontTitle
 
     -- TopNav: ONE navigation spot (horizontal, icons).
     -- Scroll your mouse wheel over it: down = slide right, up = slide left.
@@ -1023,36 +1031,154 @@ function Library:CreateWindow(opts)
             TW(Btn, { BackgroundTransparency = 1 }, 0.12)
         end)
 
-        local Page = Instance.new("ScrollingFrame")
+        -- Page: LEFT = section list (master), RIGHT = detail panel ---------
+        local Page = Instance.new("Frame")
         Page.Name = "DC_Page_" .. tabName:gsub("%W", "")
         Page.Size = UDim2.fromScale(1, 1)
         Page.BackgroundTransparency = 1
         Page.BorderSizePixel = 0
-        Page.ScrollBarThickness = 3
-        Page.ScrollBarImageColor3 = EDIT_ME.Stroke
-        Page.CanvasSize = UDim2.new(0, 0, 0, 0)
-        Page.AutomaticCanvasSize = Enum.AutomaticSize.Y
         Page.Visible = false
         Page.Parent = self._pages
-        local PLayout = Instance.new("UIListLayout")
-        PLayout.Name = "DC_PageLayout"
-        PLayout.Padding = UDim.new(0, 10)
-        PLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        PLayout.Parent = Page
 
-        local Tab = { Name = tabName, _btn = Btn, _page = Page, _window = self }
+        -- LEFT: clickable section list
+        local SectionNav = Instance.new("ScrollingFrame")
+        SectionNav.Name = "DC_SectionNav_" .. tabName:gsub("%W", "")
+        SectionNav.Size = UDim2.new(0, 176, 1, 0)
+        SectionNav.BackgroundColor3 = EDIT_ME.ElementBG
+        SectionNav.BackgroundTransparency = 0.45
+        SectionNav.BorderSizePixel = 0
+        SectionNav.CanvasSize = UDim2.new(0, 0, 0, 0)
+        SectionNav.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        SectionNav.ScrollBarThickness = 2
+        SectionNav.ScrollBarImageColor3 = EDIT_ME.Stroke
+        SectionNav.Parent = Page
+        Corner(SectionNav, EDIT_ME.Corner_Card, "DC_SectionNavCorner")
+        Stroke(SectionNav, EDIT_ME.StrokeSoft, 1, 0, "DC_SectionNavStroke")
+        Padding(SectionNav, 8, 8, 8, 8, "DC_SectionNavPadding")
+        local NavLayout = Instance.new("UIListLayout")
+        NavLayout.Name = "DC_SectionNavLayout"
+        NavLayout.Padding = UDim.new(0, 4)
+        NavLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        NavLayout.Parent = SectionNav
+
+        local NavHead = Label(SectionNav, "DC_SectionNavHead", "SECTIONS", 10, EDIT_ME.Faint, EDIT_ME.FontTitle)
+        NavHead.Size = UDim2.new(1, 0, 0, 16)
+        NavHead.LayoutOrder = 0
+
+        -- thin divider between list and detail
+        local ColDiv = Instance.new("Frame")
+        ColDiv.Name = "DC_SectionDivider"
+        ColDiv.Size = UDim2.new(0, 1, 1, -8)
+        ColDiv.Position = UDim2.new(0, 184, 0, 4)
+        ColDiv.BackgroundColor3 = EDIT_ME.Stroke
+        ColDiv.BackgroundTransparency = 0.5
+        ColDiv.BorderSizePixel = 0
+        ColDiv.Parent = Page
+
+        -- RIGHT: detail panel — shows ONLY the selected section
+        local Detail = Instance.new("ScrollingFrame")
+        Detail.Name = "DC_Detail_" .. tabName:gsub("%W", "")
+        Detail.Size = UDim2.new(1, -196, 1, 0)
+        Detail.Position = UDim2.new(0, 196, 0, 0)
+        Detail.BackgroundTransparency = 1
+        Detail.BorderSizePixel = 0
+        Detail.CanvasSize = UDim2.new(0, 0, 0, 0)
+        Detail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        Detail.ScrollBarThickness = 3
+        Detail.ScrollBarImageColor3 = EDIT_ME.Stroke
+        Detail.Parent = Page
+        local DetailLayout = Instance.new("UIListLayout")
+        DetailLayout.Name = "DC_DetailLayout"
+        DetailLayout.Padding = UDim.new(0, 10)
+        DetailLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        DetailLayout.Parent = Detail
+
+        local Tab = { Name = tabName, _btn = Btn, _page = Page, _window = self,
+            _sections = {}, _activeSection = nil, _nav = SectionNav, _detail = Detail }
+
+        -- select a section: left list highlights, right panel swaps ---------
+        function Tab:SelectSection(sec)
+            if type(sec) == "string" then
+                for _, s in ipairs(self._sections) do
+                    if s.Name == sec then sec = s break end
+                end
+            end
+            if type(sec) ~= "table" or sec._frame == nil then return end
+            self._activeSection = sec
+            for _, s in ipairs(self._sections) do
+                local active = (s == sec)
+                s._frame.Visible = active
+                TW(s._navBtn, {
+                    BackgroundColor3 = active and EDIT_ME.Card or EDIT_ME.Panel,
+                    BackgroundTransparency = active and 0 or 1,
+                }, 0.15)
+                local stroke = s._navBtn:FindFirstChild("DC_SectionBtnStroke")
+                if stroke then stroke.Transparency = active and 0 or 1 end
+                local lbl = s._navBtn:FindFirstChild("DC_SectionBtnLabel")
+                if lbl then lbl.TextColor3 = active and EDIT_ME.Text or EDIT_ME.Muted end
+                local ind = s._navBtn:FindFirstChild("DC_SectionBtnIndicator")
+                if ind then ind.BackgroundTransparency = active and 0 or 1 end
+            end
+            -- top pill follows: "Tab  •  Section"
+            pcall(function()
+                local gui = self._window and self._window._gui
+                local pillTab = gui and gui:FindFirstChild("DC_TopPillTab", true)
+                if pillTab then pillTab.Text = self.Name .. "  •  " .. sec.Name end
+            end)
+        end
 
         function Tab:CreateSection(opts2)
             opts2 = opts2 or {}
             local secName = opts2.Name or "Section"
+            local secSafe = secName:gsub("%W", "")
+            local order = #self._sections + 1
 
+            -- LEFT: nav button for this section
+            local NavBtn = Instance.new("TextButton")
+            NavBtn.Name = "DC_SectionBtn_" .. secSafe
+            NavBtn.Size = UDim2.new(1, 0, 0, 32)
+            NavBtn.BackgroundColor3 = EDIT_ME.Card
+            NavBtn.BackgroundTransparency = 1 -- ghost until selected
+            NavBtn.BorderSizePixel = 0
+            NavBtn.AutoButtonColor = false
+            NavBtn.Text = ""
+            NavBtn.LayoutOrder = order
+            NavBtn.Parent = self._nav
+            Corner(NavBtn, EDIT_ME.Corner_Small, "DC_SectionBtnCorner")
+            Stroke(NavBtn, EDIT_ME.Stroke, 1, 1, "DC_SectionBtnStroke")
+
+            local NavInd = Instance.new("Frame")
+            NavInd.Name = "DC_SectionBtnIndicator"
+            NavInd.Size = UDim2.new(0, 3, 0, 16)
+            NavInd.Position = UDim2.new(0, 6, 0.5, -8)
+            NavInd.BackgroundColor3 = EDIT_ME.Accent
+            NavInd.BackgroundTransparency = 1
+            NavInd.BorderSizePixel = 0
+            NavInd.Parent = NavBtn
+            Corner(NavInd, 99, "DC_SectionBtnIndicatorCorner")
+
+            local NavLbl = Label(NavBtn, "DC_SectionBtnLabel", secName, 12, EDIT_ME.Muted, EDIT_ME.FontBody)
+            NavLbl.Size = UDim2.new(1, -22, 1, 0)
+            NavLbl.Position = UDim2.new(0, 16, 0, 0)
+
+            NavBtn.MouseEnter:Connect(function()
+                if self._activeSection and self._activeSection._navBtn == NavBtn then return end
+                TW(NavBtn, { BackgroundTransparency = 0.55 }, 0.12)
+            end)
+            NavBtn.MouseLeave:Connect(function()
+                if self._activeSection and self._activeSection._navBtn == NavBtn then return end
+                TW(NavBtn, { BackgroundTransparency = 1 }, 0.12)
+            end)
+
+            -- RIGHT: detail card, only visible when this section is selected
             local Sec = Instance.new("Frame")
-            Sec.Name = "DC_Section_" .. secName:gsub("%W", "")
+            Sec.Name = "DC_SectionPage_" .. secSafe
             Sec.Size = UDim2.new(1, 0, 0, 40)
             Sec.BackgroundColor3 = EDIT_ME.Card
             Sec.BorderSizePixel = 0
             Sec.AutomaticSize = Enum.AutomaticSize.Y
-            Sec.Parent = Page
+            Sec.Visible = false
+            Sec.Parent = self._detail
             Corner(Sec, EDIT_ME.Corner_Card, "DC_SectionCorner")
             Stroke(Sec, EDIT_ME.Stroke, 1, 0, "DC_SectionStroke")
             Padding(Sec, 12, 10, 12, 12, "DC_SectionPadding")
@@ -1519,6 +1645,15 @@ function Library:CreateWindow(opts)
                 return B
             end
 
+            Section._navBtn = NavBtn
+            table.insert(self._sections, Section)
+            NavBtn.MouseButton1Click:Connect(function()
+                self:SelectSection(Section)
+            end)
+            if #self._sections == 1 then
+                self:SelectSection(Section) -- first section = default (e.g. Main)
+            end
+
             return Section
         end
 
@@ -1558,11 +1693,12 @@ function Library:CreateWindow(opts)
                 end
             end
         end
-        -- floating top pill follows the active tab
+        -- floating top pill follows the active tab + section
         pcall(function()
             local pillTab = self._gui and self._gui:FindFirstChild("DC_TopPillTab", true)
             if pillTab then
-                pillTab.Text = tab.Name
+                local sec = tab._activeSection
+                pillTab.Text = sec and (tab.Name .. "  •  " .. sec.Name) or tab.Name
                 if Main.Visible then pillTab.TextColor3 = EDIT_ME.Text end
             end
         end)
@@ -1624,15 +1760,15 @@ function Library:CreateWindow(opts)
     PillClose.Name = "DC_TopPillClose"
     PillClose.Size = UDim2.fromOffset(28, 28)
     PillClose.Position = UDim2.new(1, -28, 0.5, -14)
-    PillClose.BackgroundColor3 = EDIT_ME.ElementBG
+    PillClose.BackgroundColor3 = EDIT_ME.Danger -- solid red X
     PillClose.BorderSizePixel = 0
-    PillClose.Font = EDIT_ME.FontBody
+    PillClose.Font = EDIT_ME.FontTitle
     PillClose.TextSize = 13
-    PillClose.TextColor3 = EDIT_ME.Danger
+    PillClose.TextColor3 = Color3.fromRGB(255, 255, 255)
     PillClose.Text = "✕"
+    PillClose.AutoButtonColor = true
     PillClose.Parent = TopPill
     Corner(PillClose, 99, "DC_TopPillCloseCorner")
-    Stroke(PillClose, EDIT_ME.StrokeSoft, 1, 0, "DC_TopPillCloseStroke")
 
     -- drag the pill anywhere on screen
     do
@@ -1666,13 +1802,14 @@ function Library:CreateWindow(opts)
         pcall(function() ScreenGui:Destroy() end)
     end)
 
-    -- scroll while hovering the pill = change tabs
+    -- scroll while hovering the pill = switch SECTIONS (down = next) ----
+    -- (tabs with 0-1 sections fall back to switching tabs instead)
     do
         local hovering = false
         TopPill.MouseEnter:Connect(function() hovering = true end)
         TopPill.MouseLeave:Connect(function() hovering = false end)
         UserInputService.InputChanged:Connect(function(input)
-            if not (hovering and TopPill.Parent and #Window._tabs > 0) then return end
+            if not (hovering and TopPill.Parent and Window._active) then return end
             local dir = 0
             if input.UserInputType == Enum.UserInputType.MouseWheelForward then
                 dir = -1
@@ -1680,12 +1817,21 @@ function Library:CreateWindow(opts)
                 dir = 1
             end
             if dir == 0 then return end
-            local cur = 1
-            for i, t in ipairs(Window._tabs) do
-                if t == Window._active then cur = i break end
+            local atab = Window._active
+            local secs = atab._sections or {}
+            if #secs > 1 then
+                local cur = 1
+                for i, s in ipairs(secs) do
+                    if s == atab._activeSection then cur = i break end
+                end
+                atab:SelectSection(secs[((cur - 1 + dir) % #secs) + 1])
+            elseif #Window._tabs > 1 then
+                local cur = 1
+                for i, t in ipairs(Window._tabs) do
+                    if t == atab then cur = i break end
+                end
+                Window:_select(Window._tabs[((cur - 1 + dir) % #Window._tabs) + 1])
             end
-            local nxt = ((cur - 1 + dir) % #Window._tabs) + 1
-            Window:_select(Window._tabs[nxt])
         end)
     end
 
@@ -1728,6 +1874,9 @@ function Library:ShowDemo()
         end })
     Sec:AddTextbox({ Name = "Config Test", Placeholder = "type here...", Flag = "DemoText",
         Callback = function(v) print(v) end })
+    local About = Home:CreateSection({ Name = "About" })
+    About:AddParagraph({ Title = "Master-detail",
+        Text = "Sections list on the left, content on the right. Click a section, or hover the top pill and scroll." })
     Window:CreateSettingsTab()
     Window:Notify({ Title = "Dark Collection", Text = "Demo loaded." })
     return Window
